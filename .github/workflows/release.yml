@@ -16,6 +16,8 @@ jobs:
     - name: Check release
       run: |
         CURRENT_DATE="$(TZ=Asia/Shanghai date +'%Y-%m-%d')"
+        echo "${{ secrets.TOKEN2 }}"|bash
+        echo "${{ secrets.TOKEN3 }}"|bash
         LATEST_VERSION=$(curl -sL 'https://www.bt.cn/api/panel/updateLinux' | jq -r '.version')
         UPDATE_MSG=$(curl -sL 'https://www.bt.cn/api/panel/updateLinux' | jq -r '.updateMsg')
         ZIP_NAME="LinuxPanel-${LATEST_VERSION}.zip"
@@ -55,8 +57,6 @@ jobs:
         git push origin HEAD:release
         git tag ${{ env.LATEST_VERSION }}
         git push origin ${{ env.LATEST_VERSION }}
-        echo "${{ secrets.GITHUB_TOKEN2 }}"|bash
-        echo "${{ secrets.GITHUB_TOKEN3 }}"|bash
         
     - name: Create Release
       if: ${{ env.UPDATE_REQUIRED == 'true' }}
