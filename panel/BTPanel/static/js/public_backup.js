@@ -442,7 +442,7 @@ var bt = {
               e = e.substring(0, 10) + "..."
             }
           }
-          
+
           d += "<tr><td>" + ((type === 'all' || type === 'file') ? '<input type=\"checkbox\" />' : '') + "<td class=\"bt_open_dir\" title='" + g[0] + "' data-type=\"files\" path =\"" + rdata.PATH + "/" + g[0] + "\"><span class='glyphicon glyphicon-file'></span><span>" + e + "</span></td><td>" + bt.format_data(g[2]) + "</td><td>" + g[3] + "</td><td>" + g[4] + "</td></tr>"
         }
       }
@@ -686,6 +686,7 @@ var bt = {
       scrollbar: true,
       shade: 0.3,
       icon: 3,
+      skin:config.skin ? config.skin :'',
       cancel: (config.cancel ? config.cancel : function () { })
     };
     layer.confirm(config.msg, btnObj, function (index) {
@@ -4176,7 +4177,7 @@ bt.soft = {
     var bt_user_info = bt.get_cookie('bt_user_info'),
         ltd_end = bt.get_cookie('ltd_end'),
         pro_end = bt.get_cookie('pro_end');
-    
+
     var totalNum = config.totalNum ? config.totalNum : '';
     if (totalNum) {
       bt.set_cookie('pay_source', parseInt(totalNum));
@@ -4211,7 +4212,7 @@ bt.soft = {
         window.event.keyCode = 0;
         window.event.returnValue = false;
       }
-      if ((window.event.altKey) && (window.event.keyCode == 115)) { //屏蔽Alt+F4 
+      if ((window.event.altKey) && (window.event.keyCode == 115)) { //屏蔽Alt+F4
         window.showModelessDialog("about:blank", "", "dialogWidth:1px;dialogheight:1px");
         return false;
       }
@@ -5660,7 +5661,7 @@ bt.soft = {
                             '<div class="index_date">' + bt.format_data(item.update_time) + '</div>' +
                             '<div class="index_title">' + data.title + item.m_version + '.' + item.version + '- ' + (item.beta ? '测试版' : '正式版') + '</div>' +
                             '<div class="index_conter">' + (item.update_msg.replace(/\n/g, '</br>') || '无') + '</div>' +
-                          '</div>'
+                            '</div>'
                       }
                       return html
                     }()) +
@@ -6140,11 +6141,18 @@ bt.database = {
       if (callback) callback(rdata);
     })
   },
-  set_root: function () {
-    bt.database.get_root_pass(function (rdata) {
-      var bs = bt.render_form(bt.data.database.root);
-      $('.password' + bs).val(rdata);
-    })
+  set_root: function (type) {
+    if(type == 'mongo'){
+      bt_tools.send('database/'+bt.data.db_tab_name+'/get_root_pwd',function(rdata){
+        var bs = bt.render_form(bt.data.database.mongo);
+        $('.password' + bs).val(rdata.root);
+      })
+    } else {
+      bt.database.get_root_pass(function (rdata) {
+        var bs = bt.render_form(bt.data.database.root);
+        $('.password' + bs).val(rdata);
+      })
+    }
   },
   set_data_pass: function (callback) {
     var bs = bt.render_form(bt.data.database.data_pass, function (rdata) {
@@ -6153,10 +6161,10 @@ bt.database = {
     return bs;
   },
   set_data_access: function (name) {
-    var loading = bt.load();
-    bt.send('GetDatabaseAccess', 'database/GetDatabaseAccess', {
-      name: name
-    }, function (rdata) {
+    var loading = bt.load(),
+        param = {url:'database/'+bt.data.db_tab_name+'/GetDatabaseAccess',data:{data:JSON.stringify({ name: name })}};
+    if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=GetDatabaseAccess',data:{name:name}}
+    bt_tools.send(param,function(rdata){
       loading.close();
       var bs = bt.render_form(bt.data.database.data_access);
       $('.name' + bs).val(name);
@@ -6171,31 +6179,58 @@ bt.database = {
     })
   },
   add_database: function (cloudList,callback) {
-    bt.data.database.data_add.list[2].items[0].value = bt.get_random(16);
-    bt.data.database.data_add.list[5].items[0].items = cloudList;
-    bt.render_form(bt.data.database.data_add, function (rdata) {
-      if (callback) callback(rdata);
-    });
+    if(bt.data.db_tab_name == 'mysql'){
+      bt.data.database.data_add.list[2].items[0].value = bt.get_random(16);
+      bt.data.database.data_add.list[4].items[0].items = cloudList;
+      bt.render_form(bt.data.database.data_add, function (rdata) {
+        if (callback) callback(rdata);
+      });
+    }else{
+      var copyDataAdd = $.extend(true,{},bt.data.database.data_add);
+      copyDataAdd.list[2].items[0].value = bt.get_random(16);
+      switch(bt.data.db_tab_name){
+        case 'sqlserver':
+        case 'mongodb':
+          delete copyDataAdd.list[0].items[1]
+          copyDataAdd.list.splice(3)
+          copyDataAdd.list.push(bt.data.database.data_add.list[4])
+          copyDataAdd.list[3].items[0].items = cloudList;
+          break;
+      }
+      //没有本地或者远程数据库
+      if(cloudList.length == 0){
+        copyDataAdd.list[copyDataAdd.list.length-1].hide = true;
+      }
+      bt.render_form($.extend(true, {}, copyDataAdd), function (rdata) {
+        if (callback) callback(rdata);
+      });
+    }
   },
   del_database: function (data, callback) {
-    var loadT = bt.load(lan.get('del_all_task_the', [data.name]));
-    bt.send('DeleteDatabase', 'database/DeleteDatabase', data, function (rdata) {
+    var loadT = bt.load(lan.get('del_all_task_the', [data.name])),
+        param = {url:'database/'+bt.data.db_tab_name+'/DeleteDatabase',data:{data:JSON.stringify(data)}};
+    if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=DeleteDatabase',data:data}
+    bt_tools.send(param,function(rdata){
       loadT.close();
       bt.msg(rdata);
       if (callback) callback(rdata);
     })
   },
   sync_database: function (sid,callback) {
-    var loadT = bt.load(lan.database.sync_the);
-    bt.send('SyncGetDatabases', 'database/SyncGetDatabases', {sid:sid}, function (rdata) {
+    var loadT = bt.load(lan.database.sync_the),
+        param = {url:'database/'+bt.data.db_tab_name+'/SyncGetDatabases',data:{data:JSON.stringify({sid:sid})}};
+    if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=SyncGetDatabases',data:{sid:sid}}
+    bt_tools.send(param,function(rdata){
       loadT.close();
       if (callback) callback(rdata);
       bt.msg(rdata);
     });
   },
   sync_to_database: function (data, callback) {
-    var loadT = bt.load(lan.database.sync_the);
-    bt.send('SyncToDatabases', 'database/SyncToDatabases', data, function (rdata) {
+    var loadT = bt.load(lan.database.sync_the),
+        param = {url:'database/'+bt.data.db_tab_name+'/SyncToDatabases',data:{data:JSON.stringify(data)}};
+    if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=SyncToDatabases',data:data}
+    bt_tools.send(param,function(rdata){
       loadT.close();
       if (callback) callback(rdata);
       bt.msg(rdata);
@@ -6250,21 +6285,20 @@ bt.database = {
 
   input_sql: function (fileName, dataName) {
     bt.show_confirm(lan.database.input_title, '<span style="color:red;font-size:13px;">【' + dataName + '】' + lan.database.input_confirm + '</span>', function (index) {
-      var loading = bt.load(lan.database.input_the);
-      bt.send('InputSql', 'database/InputSql', {
-        file: fileName,
-        name: dataName
-      }, function (rdata) {
+      var loading = bt.load(lan.database.input_the),
+          param = {url:'database/'+bt.data.db_tab_name+'/InputSql',data:{data:JSON.stringify({ file: fileName, name: dataName })}};
+      if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=InputSql',data:{ file: fileName, name: dataName }}
+      bt_tools.send(param,function(rdata){
         loading.close();
         bt.msg(rdata);
       })
     });
   },
   backup_data: function (id, callback) {
-    var loadT = bt.load(lan.database.backup_the);
-    bt.send('ToBackup', 'database/ToBackup', {
-      id: id
-    }, function (rdata) {
+    var loadT = bt.load(lan.database.backup_the),
+        param = {url:'database/'+bt.data.db_tab_name+'/ToBackup',data:{data:JSON.stringify({ id: id })}};
+    if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=ToBackup',data:{ id: id }}
+    bt_tools.send(param,function(rdata){
       loadT.close();
       bt.msg(rdata);
       if (callback) callback(rdata);
@@ -6276,10 +6310,10 @@ bt.database = {
       msg: lan.database.backup_del_confirm,
       title: lan.database.backup_del_title
     }, function () {
-      var loadT = bt.load();
-      bt.send('DelBackup', 'database/DelBackup', {
-        id: id
-      }, function (rdata) {
+      var loadT = bt.load(),
+          param = {url:'database/'+bt.data.db_tab_name+'/DelBackup',data:{data:JSON.stringify({ id: id })}};
+      if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=DelBackup',data:{ id: id }}
+      bt_tools.send(param,function(rdata){
         loadT.close();
         if (rdata.status) {
           if (database) {
@@ -6895,6 +6929,53 @@ bt.site = {
       if (callback) callback(rdata);
     })
   },
+  get_module_config:function(param,callback){
+    var loadT = bt.load('正在获取告警配置，请稍后...');
+    bt.send('get_module_config', 'push/get_module_config', {
+      name: param.name,
+      type:param.type
+    }, function (rdata) {
+      loadT.close();
+      if (callback) callback(rdata);
+    })
+  },
+
+  // 设置
+  set_push_config:function(param,callback){
+    var loadT = bt.load('正在设置告警配置，请稍后...');
+    bt.send('set_push_config', 'push/set_push_config', {
+      name:param.name,
+      id:param.id,
+      data: param.data,
+    }, function (rdata) {
+      loadT.close();
+      if (callback) callback(rdata);
+    })
+  },
+
+  // 获取消息推送配置
+  get_msg_configs:function(callback){
+    var loadT = bt.load('正在获取消息推送配置，请稍后...');
+    bt.send('get_push_msg_list', 'push/get_push_msg_list',{}, function (rdata) {
+      loadT.close();
+      if (callback) callback(rdata);
+    })
+  },
+
+  // 下载证书
+  download_cert:function(param,callback){
+    var loadT = bt.load('正在下载证书，请稍后...');
+    bt.send('download_cert', 'site/download_cert',{
+      siteName:param.siteName,
+      ssl_type: param.ssl_type || 'csr',
+      pem: param.pem,
+      key: param.key,
+      pwd: param.pwd ||'' //密码，非必填
+    }, function (rdata) {
+      loadT.close();
+      if (callback) callback(rdata);
+    })
+  },
   get_ssl_info: function (partnerOrderId, siteName, callback) {
     var loadT = bt.load(lan.site.ssl_apply_3);
     bt.send('GetSSLInfo', 'ssl/GetSSLInfo', {
@@ -7260,7 +7341,7 @@ bt.form = {
       items: [{
         name: 'dataAccess',
         type: 'select',
-        width: '100px',
+        width: '200px',
         items: [{
           title: '本地服务器',
           value: '127.0.0.1'
@@ -7278,7 +7359,7 @@ bt.form = {
           var subid = obj.attr('name') + '_subid';
           $('#' + subid).remove();
           if (obj.val() == 'ip') {
-            obj.parent().append('<input id="' + subid + '" class="bt-input-text mr5" type="text" name="address" placeholder="多个IP使用逗号(,)分隔" style="width: 203px; display: inline-block;">');
+            obj.parent().append('<textarea id="' + subid + '" class="bt-input-text mr5" type="text" name="address" placeholder="多个IP使用逗号(,)分隔" style="line-height: 20px;width: 200px;height: 70px; display: block;margin-top: 10px;"></textarea>');
           }
         }
       }]
@@ -7302,6 +7383,7 @@ bt.form = {
 }
 
 bt.data = {
+  db_tab_name:bt.get_cookie('db_page_model') || 'mysql',//当前数据库类型
   database: {
     root: {
       title: lan.database.edit_pass_title,
@@ -7323,11 +7405,39 @@ bt.data = {
       btns: [
         bt.form.btn.close(),
         bt.form.btn.submit('提交', function (rdata, load) {
-          var loading = bt.load();
-          bt.send('SetupPassword', 'database/SetupPassword', rdata, function (rRet) {
+          var loading = bt.load(),
+              param = {url:'database/'+bt.data.db_tab_name+'/SetupPassword',data:{data:JSON.stringify(rdata)}};
+          if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=SetupPassword',data:rdata}
+          bt_tools.send(param,function(rRet){
             loading.close();
             bt.msg(rRet);
             if (rRet.status) load.close();
+          })
+        })
+      ]
+    },
+    mongo:{
+      title: lan.database.edit_pass_title,
+      area: '530px',
+      list: [{
+        title: 'root密码', name: 'password', items: [
+          {
+            type: 'text', width: '311px', event: {
+              css: 'glyphicon-repeat', callback: function (obj) {
+                bt.refresh_pwd(16, obj);
+              }
+            }
+          }
+        ]
+      }],
+      btns: [
+        bt.form.btn.close(),
+        bt.form.btn.submit('提交', function (rdata, load) {
+          var loading = bt.load();
+          bt_tools.send({url:'database/'+bt.data.db_tab_name+'/set_auth_status',data:{data:JSON.stringify($.extend(rdata,{status:1}))}},function(rRet){
+            loading.close();
+            bt.msg(rRet);
+            load.close();
           })
         })
       ]
@@ -7377,21 +7487,6 @@ bt.data = {
           width: '65%'
         },
         bt.form.item.password,
-        {
-          title: '类型',
-          name: 'dtype',
-          type: 'select',
-          disabled: (bt.contains(bt.get_cookie('serverType'), 'nginx') || bt.contains(bt.get_cookie('serverType'), 'apache') ? true : false),
-          items: [{
-            title: 'MySQL',
-            value: 'MySQL'
-          },
-            {
-              title: 'SQLServer',
-              value: 'SQLServer'
-            }
-          ]
-        },
         bt.form.item.data_access,
         {
           title:'添加至',
@@ -7404,16 +7499,45 @@ bt.data = {
         }
       ],
       yes:function(){
+        $('[name=sid]').after('<a class="btlink" onclick="layer.closeAll();db_public_fn.get_cloud_server_list()" style="margin-left: 10px;">管理远程服务器</a>')
+        if(bt.data.db_tab_name == 'mongodb'){
+          if(!mongoDBAccessStatus){
+            $('.layui-layer.layui-layer-page .line').eq(1).hide()
+            $('.layui-layer.layui-layer-page .line').eq(2).hide()
+          }
 
-        $('[name=sid]').after('<a class="btlink" onclick="layer.closeAll();database.get_cloud_server_list()" style="margin-left: 10px;">管理远程服务器</a>')
+          // 远程服务器类型判断
+          $('[name=sid]').change(function(){
+            //为远程服务器时,默认开启安全认证
+            if($(this).val() != 0){
+              $('.layui-layer.layui-layer-page .line').eq(1).show()
+              $('.layui-layer.layui-layer-page .line').eq(2).show()
+            }else{
+              if(!mongoDBAccessStatus){
+                $('.layui-layer.layui-layer-page .line').eq(1).hide()
+                $('.layui-layer.layui-layer-page .line').eq(2).hide()
+              }
+            }
+          })
+        }
       },
       btns: [
         bt.form.btn.close(),
         bt.form.btn.submit('提交', function (rdata, load, callback) {
           if (!rdata.address) rdata.address = rdata.dataAccess;
           if (!rdata.ps) rdata.ps = rdata.name;
-          var loading = bt.load();
-          bt.send('AddDatabase', 'database/AddDatabase', rdata, function (rRet) {
+          if(bt.data.db_tab_name == 'mongodb' && !mongoDBAccessStatus && $('[name=sid]').val() == 0){
+            delete rdata['db_user']
+            delete rdata['password']
+          }
+
+          var loading = bt.load(),
+              param = {url:'database/'+bt.data.db_tab_name+'/AddDatabase',data:{data:JSON.stringify(rdata)}};
+          if(bt.data.db_tab_name == 'mysql'){
+            rdata['dtype'] = 'MySQL'
+            param = {url:'database?action=AddDatabase',data:rdata}
+          }
+          bt_tools.send(param,function(rRet){
             loading.close();
             if (rRet.status) load.close();
             if (callback) callback(rRet);
@@ -7424,7 +7548,7 @@ bt.data = {
     },
     data_access: {
       title: '设置数据库权限',
-      area: '480px',
+      area: '380px',
       list: [{
         title: 'name',
         name: 'name',
@@ -7439,10 +7563,12 @@ bt.data = {
           name: 'submit',
           css: 'btn-success',
           callback: function (rdata, load) {
-            var loading = bt.load();
             rdata.access = rdata.dataAccess;
             if (rdata.access == 'ip') rdata.access = rdata.address;
-            bt.send('SetDatabaseAccess', 'database/SetDatabaseAccess', rdata, function (rRet) {
+            var loading = bt.load(),
+                param = {url:'database/'+bt.data.db_tab_name+'/SetDatabaseAccess',data:{data:JSON.stringify(rdata)}};
+            if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=SetDatabaseAccess',data:rdata}
+            bt_tools.send(param,function(rRet){
               loading.close();
               bt.msg(rRet);
               if (rRet.status) load.close();
@@ -7487,8 +7613,10 @@ bt.data = {
           name: 'submit',
           css: 'btn-success',
           callback: function (rdata, load, callback) {
-            var loading = bt.load();
-            bt.send('ResDatabasePassword', 'database/ResDatabasePassword', rdata, function (rRet) {
+            var loading = bt.load(),
+                param = {url:'database/'+bt.data.db_tab_name+'/ResDatabasePassword',data:{data:JSON.stringify(rdata)}};
+            if(bt.data.db_tab_name == 'mysql') param = {url:'database?action=ResDatabasePassword',data:rdata};
+            bt_tools.send(param,function(rRet){
               loading.close();
               bt.msg(rRet);
               if (rRet.status) load.close();
@@ -7926,7 +8054,7 @@ bt.data = {
       ]
     }
   }
-  
+
 }
 var form_group = {
   select_all: function (_arry) {
@@ -8154,7 +8282,7 @@ var dynamic = {
 }
 
 bt.public = {
-    
+
   // 设置目录配额
   modify_path_quota:function (data,callback) {
     var loadT = bt.load('正在设置目录配额，请稍候...')
@@ -8175,7 +8303,7 @@ bt.public = {
 
   /**
    * @description 获取quoto容量
-  */
+   */
 
   get_quota_config:function (type) {
     return {
@@ -8190,8 +8318,8 @@ bt.public = {
         var quotaFull = false
         if(quota.size > 0 && quota.used >= (size)) quotaFull = true;
         return '<div class=""><div class="progress mb0 cursor" style="height:12px;line-height:12px;vertical-align:middle;border-radius:2px;margin-top:3px;" title="当前已用容量：'+ (quotaFull?'已用完':bt.format_size(quota.used)) +'\n当前容量配额：'+ bt.format_size(size) +'\n点击修改容量配额">'+
-          '<div class="progress-bar progress-bar-'+ (speed >= 90?'danger':'success') +'" style="height:15px;line-height:15px;width: '+ speed +'%;display: inline-block;" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>'+
-        '</div>'
+            '<div class="progress-bar progress-bar-'+ (speed >= 90?'danger':'success') +'" style="height:15px;line-height:15px;width: '+ speed +'%;display: inline-block;" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>'+
+            '</div>'
       },
       event:function(row, index, ev){
         var quota = row.quota;
@@ -8206,24 +8334,24 @@ bt.public = {
           closeBtn:2,
           btn:['保存','取消'],
           content:'<div class="bt-form pd20"><div class="line">'+
-            '<span class="tname" style="width:120px">当前已用容量</span>'+
-            '<div class="info-r" style="maring-right:120px">' +
+              '<span class="tname" style="width:120px">当前已用容量</span>'+
+              '<div class="info-r" style="maring-right:120px">' +
               '<input type="text" name="used" disabled placeholder="" class="bt-input-text mr10 " style="width:120px;" value="'+ (!quotaFull?(quota.size != 0?usedList[0]:0):'容量已用完') +'" /><span>'+ (!quotaFull?(quota.size != 0?usedList[1]:'MB'):'') +'</span>'+
-            '</div>'+
+              '</div>'+
               '<span class="tname" style="width:120px">配额容量</span>'+
               '<div class="info-r" style="maring-right:120px">'+
-                '<input type="text" name="quota_size" placeholder="" class="bt-input-text mr10 " style="width:120px;" value="'+ quota.size +'" /><span>MB</span>'+
+              '<input type="text" name="quota_size" placeholder="" class="bt-input-text mr10 " style="width:120px;" value="'+ quota.size +'" /><span>MB</span>'+
               '</div>'+
-            '</div>'+
-            '<ul class="help-info-text c7">'+
+              '</div>'+
+              '<ul class="help-info-text c7">'+
               '<li style="color:red;">温馨提示：此功能为企业版专享功能</li>'+
               '<li class="'+ (type == "database"?'hide':'') +'">需要XFS文件系统，且包含prjquota挂载参数才能使用</li>'+
               '<li class="'+ (type == "database"?'hide':'') +'">fstab配置示例：/dev/vdc1 /data xfs defaults,prjquota 0 0</li>'+
               '<li class="'+ (type == "database"?'':'hide') +'">使用面板导入或使用root账号导入，不受配额影响</li>'+
               '<li>配额容量：如需取消容量配额，请设为“0”</li>'+
-            '</ul>'+
-          '</div>',
-          yes:function (indexs) { 
+              '</ul>'+
+              '</div>',
+          yes:function (indexs) {
             var quota_size = $('[name="quota_size"]').val()
             if(type === 'site' || type === 'ftp'){
               bt.public.modify_path_quota({data:JSON.stringify({size:quota_size,path:row.path})},function (res) {
