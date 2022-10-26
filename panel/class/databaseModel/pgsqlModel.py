@@ -396,7 +396,7 @@ class main(databaseBase,panelPgsql):
         exts = ['sql']
         ext = tmp[len(tmp) -1]
         if ext not in exts:
-            return public.returnMsg(False, 'DATABASE_INPUT_ERR_FORMAT')
+            return public.returnMsg(False, '文件格式不正确,请上传sql文件.')
 
         sql_dump = '{}/bin/psql'.format(self.__soft_path)
         if not os.path.exists(sql_dump):
