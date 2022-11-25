@@ -440,7 +440,10 @@ class main(databaseBase,panelPgsql):
                 find = sql.where("id=?",(value,)).field('id,name,username,password,sid,db_type,accept,type').find()
                 result = self.ToDataBase(find)
                 if result == 1: n +=1
-        print(n)
+        if n == 1:
+            return public.returnMsg(True, '同步成功')
+        elif n == 0:
+            return public.returnMsg(False,'同步失败')
         return public.returnMsg(True,'DATABASE_SYNC_SUCCESS',(str(n),))
 
     def ToDataBase(self,find):
